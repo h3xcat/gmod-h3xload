@@ -49,7 +49,7 @@ end
 
 function H3xLoad.RequestResources()
 	MsgN("[H3xLoad] Requesting resource files from server...")
-	H3xLoad.FileNet.RequestCacheFile()
+	timer.Simple(0, H3xLoad.FileNet.RequestCacheFile )
 end
 
 function H3xLoad.LoadResources()
@@ -57,16 +57,16 @@ function H3xLoad.LoadResources()
 
 	-- Check if cached version exist
 	if file.Exists( cache_file, "DATA" ) then
-		local cache_time = H3xLoad.GetCacheTimestamp()
-		local server_cache_time = GetGlobalString("H3xLoad_CacheTimestamp")
+		local cache_time = H3xLoad.GetCacheTimestamp( true )
+		local server_cache_time = H3xLoad.GetServerCacheTimestamp()
 		if cache_time ~= server_cache_time then
-			MsgN("[H3xLoad Outdated resource files")
+			MsgN("[H3xLoad Outdated resource cache ",server_cache_time," ",cache_time)
 			file.Delete( cache_file )
 			H3xLoad.RequestResources()
 			return 
 		end
 
-		local succ, mounted_files = game.MountGMA( cache_file )
+		local succ, mounted_files = game.MountGMA( "data/"..cache_file )
 		if succ then
 			MsgN("[H3xLoad] Successfully mounted ", #mounted_files, " resource files")
 		else

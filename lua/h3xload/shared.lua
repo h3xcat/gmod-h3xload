@@ -36,24 +36,24 @@ function H3xLoad.CompressedCacheFileName()
 	return "h3xload/cache/"..H3xLoad.GetServerID()..".compressed.dat"
 end
 
+function H3xLoad.GetCacheTimestamp( reload )
+	if not reload and H3xLoad.CacheTimestamp then return H3xLoad.CacheTimestamp end
+	
+	local fl = file.Open( H3xLoad.CacheFileName(), "rb", "DATA" )
+	if not fl then return nil end
 
-function H3xLoad.GetServerCacheTimestamp( reload )
-	if CLIENT then 
-		return GetGlobalInt("H3xLoad_ServerCacheTimestamp")
-	elseif SERVER then
-		if not reload and H3xLoad.ServerCacheTimestamp then return H3xLoad.ServerCacheTimestamp end
-		
-		local fl = file.Open( H3xLoad.CacheFileName(), "rb", "DATA" )
-		if not fl then return nil end
+	fl:Seek(13)
+	local timestamp = fl:ReadLong()
+	fl:Close()
 
-		fl:Seek(13)
-		local timestamp = fl:ReadLong()
-		fl:Close()
-
-		H3xLoad.ServerCacheTimestamp = timestamp >= 0 and timestamp or timestamp + 0x100000000
-		SetGlobalString( "H3xLoad_ServerCacheTimestamp", H3xLoad.ServerCacheTimestamp )
-
-		return H3xLoad.ServerCacheTimestamp
+	H3xLoad.CacheTimestamp = timestamp >= 0 and timestamp or timestamp + 0x100000000
+	
+	if SERVER then
+		SetGlobalString( "H3xLoad_ServerCacheTimestamp", tostring(H3xLoad.CacheTimestamp) )
 	end
 
+	return H3xLoad.CacheTimestamp
+end
+function H3xLoad.GetServerCacheTimestamp( reload )
+	return tonumber(GetGlobalString("H3xLoad_ServerCacheTimestamp"))
 end

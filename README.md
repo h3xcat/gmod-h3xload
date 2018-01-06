@@ -1,1 +1,1 @@
-Incomplete addon, I decided its too big of a clusterfuck to continue. Feel free to fork.
+Incomplete addon. Feel free to fork.

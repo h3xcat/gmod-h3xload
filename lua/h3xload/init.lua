@@ -24,7 +24,7 @@ function H3xLoad.GenerateResourceCache()
 		return false
 	end
 
-	H3xLoad.GetServerCacheTimestamp( true ) -- Update timestamp
+	H3xLoad.GetCacheTimestamp( true ) -- Update timestamp
 
 	------------------------
 	-- Write resource list
@@ -125,9 +125,13 @@ function H3xLoad.Initialize()
 			H3xLoad.FileNet.OpenFile( H3xLoad.CompressedCacheFileName() )
 		else
 			MsgN( "[H3xLoad] Something went wrong while generating cache" )
+			file.Delete( H3xLoad.CacheFileName() )
+			file.Delete( H3xLoad.CompressedCacheFileName() )
+			file.Delete( "h3xload/cache_resources.dat" )
 		end
 	else
 		MsgN( "[H3xLoad] Resource cache is up to date" )
+		H3xLoad.GetCacheTimestamp( true ) 
 		H3xLoad.FileNet.OpenFile( H3xLoad.CompressedCacheFileName() )
 	end
 

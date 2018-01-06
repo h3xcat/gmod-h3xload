@@ -36,17 +36,20 @@ if SERVER then
 
 		local o_size = buffer_o:Size()
 		while ( o_size-buffer_o:Tell() >= filenet_chunk_size ) do
-			local compressed = util.Compress( buffer_o:ReadData(filenet_chunk_size) )
-			local compressed_size = #compressed
-			buffer_c:WriteUInt16(compressed_size)
-			buffer_c:WriteData(compressed, compressed_size)
+			local block_data = buffer_o:ReadData(filenet_chunk_size)
+
+			local block_compressed = util.Compress( block_data )
+			local block_compressed_size = #block_compressed
+			buffer_c:WriteUInt16(block_compressed_size)
+			buffer_c:WriteData(block_compressed, block_compressed_size)
 		end
 
 		local remaining =  o_size-buffer_o:Tell()
-		local compressed = util.Compress( buffer_o:ReadData(remaining) )
-		local compressed_size = #compressed
-		buffer_c:WriteUInt16(compressed_size)
-		buffer_c:WriteData(compressed, compressed_size)
+		local block_data = buffer_o:ReadData(remaining)
+		local block_compressed = util.Compress( block_data )
+		local block_compressed_size = #block_compressed
+		buffer_c:WriteUInt16(block_compressed_size)
+		buffer_c:WriteData(block_compressed, block_compressed_size)
 		
 		fl_o:Close()
 		fl_c:Close()
@@ -54,7 +57,7 @@ if SERVER then
 	end
 
 	function FileNet.OpenFile( filename )
-		if FileNet.IsFileOpen then FileNet.CloseFile() end
+		if FileNet.File then FileNet.CloseFile() end
 		
 		
 		local fl = file.Open( filename ,"rb", "DATA")
@@ -63,7 +66,6 @@ if SERVER then
 			return false
 		end
 
-		FileNet.IsFileOpen = true
 		FileNet.File = fl
 		FileNet.FileBuffer = BufferInterface(fl)
 
@@ -75,47 +77,47 @@ if SERVER then
 		while buffer:Tell() < file_size do
 			local block_start = buffer:Tell()
 			local block_size = buffer:ReadUInt16()
-			file_blocks[#file_blocks + 1] = block_start
 			buffer:Seek(block_start+block_size+2)
+
+			file_blocks[#file_blocks + 1] = block_start
 		end
 
 		FileNet.FileBlocks = file_blocks
+		FileNet.TotalBlocks = #file_blocks
 
 		MsgN("[H3xLoad] Prepared compressed file for networking, total blocks: ",#file_blocks)
 	end
 
 	function FileNet.CloseFile()
 		if not FileNet.IsFileOpen then return end
-		FileNet.IsFileOpen = false
 		FileNet.File:Close()
 		FileNet.File = nil
 		FileNet.FileBuffer = nil
 		FileNet.FileBlocks = nil
 	end
-
-	function FileNet.SendFile( ply, filename )
-
-	end
-
-	function FileNet.RequestNextBlock( len, ply )
-		if not FileNet.IsFileOpen then return end
+	
+	net.Receive( "H3xLoad_FileNet_RequestNextBlock", function( len, ply )
+		if not FileNet.File then return end
 
 		local buffer = BufferInterface("net")
+
 		local block_num = buffer:ReadUInt16()
 		local block_start = FileNet.FileBlocks[block_num]
 		if not block_start then return end
 
 		local fl_buffer = FileNet.FileBuffer
 		fl_buffer:Seek(block_start)
-		local block_size = buffer:ReadUInt16()
+		local block_size = fl_buffer:ReadUInt16()
+		local block_data = fl_buffer:ReadData(block_size)
 
-		net.Start("H3xLoad_FileNet_NextBlock", true)
-		buffer:WriteBool(#FileNet.FileBlocks == next_block) -- Is final block?
+		net.Start("H3xLoad_FileNet_NextBlock")
+		buffer:WriteUInt16(block_num)
+		buffer:WriteUInt16(FileNet.TotalBlocks)
+		
 		buffer:WriteUInt16(block_size)
-		buffer:WriteData(fl_buffer:ReadData(block_size),block_size)
+		buffer:WriteData(block_data,block_size)
 		net.Send(ply)
-	end
-	net.Receive( "H3xLoad_FileNet_RequestNextBlock", FileNet.RequestNextBlock )
+	end )
 end
 
 if CLIENT then
@@ -129,27 +131,45 @@ if CLIENT then
 		FileNet.File = fl
 		FileNet.FileBuffer = BufferInterface(fl)
 
-		FileNet.CurrentBlock = 0
-		FileNet.RequestNextBlock()
+		FileNet.CurrentBlock = 1
+		FileNet.RequesBlock( 1 )
 	end
 
 	function FileNet.RequestNextBlock()
 		FileNet.CurrentBlock = FileNet.CurrentBlock + 1
+		FileNet.RequesBlock( FileNet.CurrentBlock )
+	end
+
+	function FileNet.RequesBlock( num )
 		net.Start("H3xLoad_FileNet_RequestNextBlock")
-		net.WriteUInt(FileNet.CurrentBlock, 16)
+		net.WriteUInt(num, 16)
 		net.SendToServer()
 	end
 	
 	function FileNet.NextBlock()
 		local buffer = BufferInterface("net")
-		local is_final = buffer:ReadBool()
 
+		local block_num = buffer:ReadUInt16()
+		local block_total = buffer:ReadUInt16()
 		local block_size = buffer:ReadUInt16()
+		
+		if FileNet.CurrentBlock ~= block_num then
+			FileNet.RequesBlock( FileNet.CurrentBlock )
+			MsgN("[H3xLoad] Invalid block (should:",FileNet.CurrentBlock," received:",block_num,")")
+			return
+		end
+		MsgN("[H3xLoad] Received block ",block_num,"/",block_total)
+
 		local block_compressed = buffer:ReadData(block_size)
+		local block_data = util.Decompress(block_compressed)
 
-		FileNet.FileBuffer:WriteData( util.Decompress(block_compressed) )
+		if not block_data then
+			MsgN("[H3xLoad] Invalid block received")
+			return
+		end
+		FileNet.FileBuffer:WriteData( block_data )
 
-		if not is_final then
+		if block_num < block_total  then
 			FileNet.RequestNextBlock()
 		else
 			MsgN("[H3xLoad] Completed receiving file")

@@ -2,10 +2,6 @@ local string_lower = string.lower
 local os_time = os.time 
 --------------------------------------------------------------------------------
 local BufferInterface = H3xLoad.Libs.BufferInterface
---local CRC32 = include( "libraries/crc32.lua" )
-
---local crc32_byte = CRC32.byte
-
 --------------------------------------------------------------------------------
 
 local function FileCRC( filename, path )
